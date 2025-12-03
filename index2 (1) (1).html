@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>RunTrack Pro</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;700&family=Black+Ops+One&display=swap');
+
+        :root {
+            --bg: #000000;
+            --text: #ffffff;
+            --c-walk: #00ff66;
+            --c-run: #ff9d00;
+            --c-sprint: #ff003c;
+            --theme: var(--c-walk);
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: 'Chakra Petch', sans-serif;
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        /* GPS Switch */
+        .gps-control-area {
+            display: flex; align-items: center; gap: 10px;
+            background: #111; padding: 5px 12px; border-radius: 20px; border: 1px solid #333;
+        }
+        .switch { position: relative; display: inline-block; width: 40px; height: 20px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #333; transition: .4s; border-radius: 20px; }
+        .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 2px; bottom: 2px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: var(--c-walk); }
+        input:checked + .slider:before { transform: translateX(20px); }
+        .gps-label { font-size: 0.8rem; font-weight: bold; color: #aaa; }
+
+        header {
+            padding: 10px 15px; border-bottom: 1px solid #222;
+            display: flex; justify-content: space-between; align-items: center; background: #050505;
+        }
+        
+        /* Speedometer */
+        .speed-section { text-align: center; padding: 10px 0; background: radial-gradient(circle, #111 0%, #000 80%); }
+        .speed-val {
+            font-family: 'Black Ops One', cursive; font-size: 4.5rem; line-height: 0.9;
+            color: var(--theme); text-shadow: 0 0 20px var(--theme);
+        }
+        .speed-unit { color: #666; font-size: 1rem; letter-spacing: 2px; }
+
+        /* Animation */
+        .anim-box {
+            flex: 1; position: relative; display: flex; justify-content: center; align-items: flex-end;
+            border-bottom: 2px solid var(--theme); overflow: hidden;
+            background: linear-gradient(to bottom, #000, #111);
+        }
+        .floor {
+            position: absolute; bottom: 0; width: 100%; height: 100%;
+            background: linear-gradient(90deg, transparent 95%, rgba(255,255,255,0.1) 95%);
+            background-size: 40px 100%; z-index: 1;
+        }
+        svg { width: 90px; height: 130px; z-index: 10; padding-bottom: 5px; }
+        .bone { stroke: var(--theme); stroke-width: 5; stroke-linecap: round; transition: stroke 0.3s; }
+        .head { fill: #000; stroke: var(--theme); stroke-width: 3; transition: stroke 0.3s; }
+
+        /* Stats */
+        .stats-grid {
+            display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px;
+            padding: 10px; background: #080808; border-bottom: 1px solid #222;
+        }
+        .stat-card { background: #151515; padding: 10px; text-align: center; border-radius: 6px; }
+        .val { font-size: 1.3rem; font-weight: bold; }
+        .lbl { font-size: 0.65rem; color: #888; margin-top: 2px; text-transform: uppercase; }
+        #disp-time { font-family: monospace; color: #ddd; }
+
+        /* HISTORY SECTION */
+        .history-header {
+            background: #111; color: #fff; padding: 10px 15px; font-size: 0.9rem; font-weight: bold;
+            display: flex; justify-content: space-between; align-items: center; cursor: pointer; border-bottom: 1px solid #333;
+        }
+        #history-panel {
+            height: 140px; overflow-y: auto; background: #000; padding: 5px; display: block;
+        }
+        .hist-item {
+            background: #0e0e0e; margin-bottom: 6px; padding: 10px; border-radius: 6px;
+            border-left: 4px solid var(--theme); display: flex; justify-content: space-between; align-items: center; 
+        }
+        .hist-info { display: flex; flex-direction: column; gap: 2px; }
+        .hist-date { font-size: 0.75rem; color: #888; margin-top: 2px; }
+        .del-btn { color: #ff4444; font-weight: bold; padding: 5px 10px; cursor: pointer; border: 1px solid #333; border-radius: 4px; font-size: 0.8rem; }
+
+        /* Controls */
+        .controls { padding: 10px; display: flex; gap: 10px; background: #000; }
+        button {
+            flex: 1; padding: 15px; border-radius: 50px; border: none;
+            font-weight: bold; font-family: 'Chakra Petch'; text-transform: uppercase;
+            font-size: 1.1rem; cursor: pointer;
+        }
+        #btn-start { background: var(--c-walk); color: #000; box-shadow: 0 0 15px var(--c-walk); }
+        #btn-stop { background: var(--c-sprint); color: #fff; display: none; box-shadow: 0 0 15px var(--c-sprint); }
+        #btn-pocket { flex: 0.4; background: #222; color: #fff; font-size: 0.8rem; display: none; }
+
+        /* Pocket Overlay */
+        #pocket-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #000; z-index: 9999; display: none;
+            flex-direction: column; justify-content: center; align-items: center;
+        }
+        .pocket-msg { animation: pulse 2s infinite; color: #555; margin-top: 10px; }
+        @keyframes pulse { 0% {opacity:0.4;} 50% {opacity:1;} 100% {opacity:0.4;} }
+
+    </style>
+</head>
+<body>
+
+    <div id="pocket-overlay">
+        <div style="font-size:3rem;">🔒</div>
+        <div class="pocket-msg">Double Tap to Unlock</div>
+    </div>
+
+    <header>
+        <div style="font-weight:bold;">LIVE<span style="color:var(--theme)">TRACK</span></div>
+        <div class="gps-control-area">
+            <span class="gps-label">GPS</span>
+            <label class="switch">
+                <input type="checkbox" id="gps-toggle" checked>
+                <span class="slider round"></span>
+            </label>
+        </div>
+    </header>
+
+    <div class="speed-section">
+        <div class="speed-unit">CURRENT SPEED</div>
+        <div class="speed-val" id="disp-speed">0.0</div>
+        <div class="speed-unit">KM/H</div>
+    </div>
+
+    <div class="anim-box">
+        <div class="floor" id="floor"></div>
+        <svg viewBox="0 0 100 150">
+            <circle cx="50" cy="30" r="10" class="head" />
+            <line x1="50" y1="40" x2="50" y2="90" class="bone" />
+            <line id="arm-l" x1="50" y1="50" x2="30" y2="80" class="bone" />
+            <line id="arm-r" x1="50" y1="50" x2="70" y2="80" class="bone" />
+            <line id="leg-l" x1="50" y1="90" x2="40" y2="140" class="bone" />
+            <line id="leg-r" x1="50" y1="90" x2="60" y2="140" class="bone" />
+        </svg>
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat-card">
+            <!-- 3 DECIMAL PLACES for METER LEVEL ACCURACY -->
+            <div class="val" id="disp-dist">0.000</div>
+            <div class="lbl">DISTANCE (KM)</div>
+        </div>
+        <div class="stat-card">
+            <div class="val" id="disp-steps">0</div>
+            <div class="lbl">STEPS</div>
+        </div>
+        <div class="stat-card">
+            <div class="val" id="disp-time">00:00:00</div>
+            <div class="lbl">TIME</div>
+        </div>
+    </div>
+
+    <div class="history-header" id="hist-toggle">
+        <span>RUN HISTORY</span>
+        <span id="hist-arrow">▼</span>
+    </div>
+    <div id="history-panel">
+        <div style="text-align:center; padding:20px; color:#444">No history yet</div>
+    </div>
+
+    <div class="controls">
+        <button id="btn-start">START</button>
+        <button id="btn-stop">STOP & SAVE</button>
+        <button id="btn-pocket">POCKET</button>
+    </div>
+
+<script>
+    // --- Config ---
+    const STRIDE_M = 0.762; // Accurate stride length (meters)
+    
+    // --- State ---
+    let tracking = false;
+    let useGPS = true; 
+    let startTime = 0;
+    let timerInt = null;
+    let wakeLock = null;
+    
+    let totalDist = 0; // in Meters
+    let totalSteps = 0;
+    let currentSpeed = 0.0;
+
+    let lastStepTime = 0;
+    let watchId = null;
+    let lastLat = null, lastLon = null;
+    let animTimer = null, legPhase = 0;
+
+    // --- DOM Elements ---
+    const ui = {
+        speed: document.getElementById('disp-speed'),
+        dist: document.getElementById('disp-dist'),
+        steps: document.getElementById('disp-steps'),
+        time: document.getElementById('disp-time'),
+        gpsToggle: document.getElementById('gps-toggle'),
+        floor: document.getElementById('floor'),
+        pocket: document.getElementById('pocket-overlay'),
+        histPanel: document.getElementById('history-panel'),
+        btnStart: document.getElementById('btn-start'),
+        btnStop: document.getElementById('btn-stop'),
+        btnPocket: document.getElementById('btn-pocket')
+    };
+
+    const svg = {
+        legL: document.getElementById('leg-l'), legR: document.getElementById('leg-r'),
+        armL: document.getElementById('arm-l'), armR: document.getElementById('arm-r')
+    };
+
+    // --- Toggle Logic ---
+    ui.gpsToggle.addEventListener('change', (e) => {
+        useGPS = e.target.checked;
+        if(tracking && useGPS && !watchId) {
+            if(navigator.geolocation) watchId = navigator.geolocation.watchPosition(handleGPS, null, {enableHighAccuracy:true});
+        } else if(tracking && !useGPS && watchId) {
+            navigator.geolocation.clearWatch(watchId); watchId = null;
+            ui.speed.innerText = "0.0";
+        }
+    });
+
+    // --- Control Functions ---
+    function startApp() {
+        tracking = true;
+        startTime = Date.now();
+        
+        // Reset - Show 3 decimals (0.000)
+        totalDist = 0; totalSteps = 0; currentSpeed = 0;
+        ui.dist.innerText = "0.000"; ui.steps.innerText = "0"; ui.time.innerText = "00:00:00";
+        
+        ui.btnStart.style.display = 'none';
+        ui.btnStop.style.display = 'block';
+        ui.btnPocket.style.display = 'block';
+        ui.histPanel.style.display = 'none'; 
+
+        if('wakeLock' in navigator) navigator.wakeLock.request('screen').catch(()=>{});
+        
+        clearInterval(timerInt);
+        timerInt = setInterval(updateTimer, 1000);
+
+        if(useGPS && navigator.geolocation) {
+            watchId = navigator.geolocation.watchPosition(handleGPS, null, {enableHighAccuracy:true, maximumAge:0});
+        }
+
+        if(window.DeviceMotionEvent) {
+             if (typeof DeviceMotionEvent.requestPermission === 'function') {
+                DeviceMotionEvent.requestPermission().then(r => {
+                    if(r==='granted') window.addEventListener('devicemotion', handleMotion);
+                });
+            } else {
+                window.addEventListener('devicemotion', handleMotion);
+            }
+        }
+    }
+
+    function stopApp() {
+        if(!tracking) return;
+        tracking = false;
+        
+        clearInterval(timerInt);
+        if(watchId) navigator.geolocation.clearWatch(watchId);
+        window.removeEventListener('devicemotion', handleMotion);
+        if(wakeLock) wakeLock.release();
+
+        if(totalSteps > 0 || totalDist > 0) {
+            saveHistory();
+        }
+
+        ui.btnStart.style.display = 'block';
+        ui.btnStop.style.display = 'none';
+        ui.btnPocket.style.display = 'none';
+        ui.histPanel.style.display = 'block';
+        
+        currentSpeed = 0;
+        updateVisuals();
+        resetPose();
+    }
+
+    function updateTimer() {
+        const diff = Date.now() - startTime;
+        const h = Math.floor(diff / 3600000);
+        const m = Math.floor((diff % 3600000) / 60000);
+        const s = Math.floor((diff % 60000) / 1000);
+        ui.time.innerText = (h<10?'0'+h:h) + ":" + (m<10?'0'+m:m) + ":" + (s<10?'0'+s:s);
+        
+        if(Date.now() - lastStepTime > 2000 && currentSpeed > 0) {
+            currentSpeed = 0; updateVisuals();
+        }
+    }
+
+    // --- Tracking Logic ---
+    function handleGPS(pos) {
+        if(!tracking || !useGPS) return;
+        const { latitude, longitude, accuracy, speed } = pos.coords;
+
+        if(accuracy < 30) {
+            if(speed !== null && speed > 0.5) {
+                currentSpeed = speed * 3.6;
+                updateVisuals();
+            }
+            if(lastLat) {
+                const d = getDist(lastLat, lastLon, latitude, longitude);
+                // Ultra Precision: Update if moved > 0.8 meters
+                if(d > 0.8) {
+                    totalDist += d;
+                    lastLat = latitude; lastLon = longitude;
+                    // SHOW 3 DECIMALS (METER PRECISION)
+                    ui.dist.innerText = (totalDist/1000).toFixed(3);
+                }
+            } else { lastLat = latitude; lastLon = longitude; }
+        }
+    }
+
+    let lastMag = 0;
+    function handleMotion(e) {
+        if(!tracking) return;
+        const acc = e.accelerationIncludingGravity;
+        if(!acc) return;
+        const mag = Math.sqrt(acc.x*acc.x + acc.y*acc.y + acc.z*acc.z);
+        
+        if(Math.abs(mag - lastMag) > 2 && mag > 10.5) {
+            const now = Date.now();
+            if(now - lastStepTime > 250) {
+                totalSteps++;
+                ui.steps.innerText = totalSteps;
+
+                if(!useGPS) {
+                    totalDist += STRIDE_M;
+                    // SHOW 3 DECIMALS (METER PRECISION)
+                    ui.dist.innerText = (totalDist/1000).toFixed(3);
+                }
+
+                if(!useGPS || currentSpeed < 1) {
+                    const duration = now - lastStepTime;
+                    let s = (STRIDE_M / (duration/1000)) * 3.6;
+                    if(s > 25) s = 25;
+                    currentSpeed = s;
+                }
+                
+                lastStepTime = now;
+                updateVisuals();
+                animateFrame();
+            }
+        }
+        lastMag = mag;
+    }
+
+    // --- Visuals ---
+    function updateVisuals() {
+        ui.speed.innerText = currentSpeed.toFixed(1);
+        let t = '--c-walk';
+        if(currentSpeed >= 6) t = '--c-run';
+        if(currentSpeed >= 12) t = '--c-sprint';
+        document.documentElement.style.setProperty('--theme', getComputedStyle(document.documentElement).getPropertyValue(t));
+    }
+
+    function animateFrame() {
+        const run = currentSpeed > 6;
+        ui.floor.style.transition = run ? "0.1s linear" : "0.2s linear";
+        ui.floor.style.backgroundPositionX = `-${totalSteps * (run?40:20)}px`;
+        if(legPhase === 0) { setPose(1, run); legPhase = 1; }
+        else { setPose(2, run); legPhase = 0; }
+        clearTimeout(animTimer);
+        animTimer = setTimeout(resetPose, 600);
+    }
+
+    function setPose(p, r) {
+        const s=r?35:15, l=r?20:10, a=r?40:20;
+        if(p===1) {
+            svg.legL.setAttribute('x2', 50-s); svg.legL.setAttribute('y2', 140-l);
+            svg.legR.setAttribute('x2', 50+s); svg.legR.setAttribute('y2', 140);
+            svg.armL.setAttribute('x2', 50+a); svg.armL.setAttribute('y2', 80-l/2);
+            svg.armR.setAttribute('x2', 50-a); svg.armR.setAttribute('y2', 80-l/2);
+        } else {
+            svg.legL.setAttribute('x2', 50+s); svg.legL.setAttribute('y2', 140);
+            svg.legR.setAttribute('x2', 50-s); svg.legR.setAttribute('y2', 140-l);
+            svg.armL.setAttribute('x2', 50-a); svg.armL.setAttribute('y2', 80-l/2);
+            svg.armR.setAttribute('x2', 50+a); svg.armR.setAttribute('y2', 80-l/2);
+        }
+    }
+    function resetPose() {
+        svg.legL.setAttribute('x2', 45); svg.legL.setAttribute('y2', 140);
+        svg.legR.setAttribute('x2', 55); svg.legR.setAttribute('y2', 140);
+        svg.armL.setAttribute('x2', 40); svg.armL.setAttribute('y2', 80);
+        svg.armR.setAttribute('x2', 60); svg.armR.setAttribute('y2', 80);
+    }
+
+    // --- HISTORY SYSTEM ---
+    function saveHistory() {
+        const runs = JSON.parse(localStorage.getItem('runTrackPro') || "[]");
+        const now = new Date();
+        const dateStr = now.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+        const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        const entry = {
+            id: Date.now(),
+            dateDisplay: `${dateStr} • ${timeStr}`,
+            // Save with 3 decimal precision
+            dist: (totalDist/1000).toFixed(3),
+            steps: totalSteps,
+            time: ui.time.innerText
+        };
+        runs.unshift(entry);
+        localStorage.setItem('runTrackPro', JSON.stringify(runs));
+        renderHistory();
+    }
+
+    function renderHistory() {
+        const runs = JSON.parse(localStorage.getItem('runTrackPro') || "[]");
+        ui.histPanel.innerHTML = "";
+        
+        if(runs.length === 0) {
+            ui.histPanel.innerHTML = "<div style='text-align:center; padding:20px; color:#444'>No history yet</div>";
+            return;
+        }
+
+        runs.forEach(r => {
+            const div = document.createElement('div');
+            div.className = 'hist-item';
+            div.innerHTML = `
+                <div class="hist-info">
+                    <div style="color:#fff; font-weight:bold; font-size:0.9rem;">${r.dist} km <span style="color:#666">|</span> ${r.steps} steps</div>
+                    <div class="hist-date">${r.dateDisplay}</div>
+                    <div style="font-family:monospace; color:#aaa; font-size:0.75rem;">Duration: ${r.time}</div>
+                </div>
+                <div class="del-btn" onclick="delRun(${r.id})">DELETE</div>
+            `;
+            ui.histPanel.appendChild(div);
+        });
+    }
+
+    window.delRun = function(id) {
+        if(!confirm("Delete this record?")) return;
+        let runs = JSON.parse(localStorage.getItem('runTrackPro') || "[]");
+        runs = runs.filter(r => r.id !== id);
+        localStorage.setItem('runTrackPro', JSON.stringify(runs));
+        renderHistory();
+    };
+
+    function getDist(lat1, lon1, lat2, lon2) {
+        const R=6371e3, p=Math.PI/180;
+        const a = 0.5 - Math.cos((lat2-lat1)*p)/2 + Math.cos(lat1*p)*Math.cos(lat2*p) * (1-Math.cos((lon2-lon1)*p))/2;
+        return 2*R*Math.asin(Math.sqrt(a));
+    }
+
+    // Init
+    ui.btnStart.onclick = startApp;
+    ui.btnStop.onclick = stopApp;
+    ui.btnPocket.onclick = () => ui.pocket.style.display = 'flex';
+    
+    let lastTap=0;
+    ui.pocket.onclick = () => {
+        const n = Date.now();
+        if(n - lastTap < 400) ui.pocket.style.display='none';
+        lastTap = n;
+    };
+    
+    document.getElementById('hist-toggle').onclick = () => {
+        ui.histPanel.style.display = ui.histPanel.style.display === 'none' ? 'block' : 'none';
+    };
+
+    renderHistory();
+    resetPose();
+
+</script>
+</body>
+</html>
